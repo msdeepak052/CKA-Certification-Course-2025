@@ -96,6 +96,12 @@ Before we start, ensure you have the following installed:
 
 * **KIND** – [Install guide](https://kind.sigs.k8s.io/docs/user/quick-start/#installation)
 * **Helm** – [Install guide](https://helm.sh/docs/intro/install/)
+```bash
+curl -fsSL -o get_helm.sh https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-4
+chmod 700 get_helm.sh
+./get_helm.sh
+
+```
 * **kubectl** (includes Kustomize support, which we’ll use to install CRDs)
 
 ---
