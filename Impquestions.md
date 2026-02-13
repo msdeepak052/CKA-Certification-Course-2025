@@ -254,3 +254,461 @@ helm ls -n kk-ns
 
 ---
 
+
+# Kubernetes Administration Tasks Documentation
+
+---
+
+## Q1. Configure Network Parameters for kubeadm
+
+### Task
+
+Prepare the system for Kubernetes cluster deployment using `kubeadm` by configuring the following sysctl parameters and ensuring they persist across reboots:
+
+```
+net.ipv4.ip_forward = 1
+net.bridge.bridge-nf-call-iptables = 1
+```
+
+---
+
+### Solution
+
+#### Step 1: Configure Persistent sysctl Parameters
+
+Append the required parameters to `/etc/sysctl.conf`:
+
+```bash
+echo 'net.ipv4.ip_forward = 1' >> /etc/sysctl.conf
+echo 'net.bridge.bridge-nf-call-iptables = 1' >> /etc/sysctl.conf
+```
+
+#### Step 2: Apply Changes Immediately
+
+```bash
+sysctl -p
+```
+
+#### Step 3: Verify Configuration
+
+```bash
+sysctl net.ipv4.ip_forward
+sysctl net.bridge.bridge-nf-call-iptables
+```
+
+---
+
+## Q2. Create ServiceAccount with ClusterRole Access
+
+### Task
+
+1. Create a ServiceAccount named `pvviewer`.
+2. Create a ClusterRole named `pvviewer-role` that allows listing PersistentVolumes.
+3. Create a ClusterRoleBinding named `pvviewer-role-binding`.
+4. Create a Pod named `pvviewer` using image `redis` with the ServiceAccount attached.
+
+---
+
+### Solution
+
+#### Step 1: Create ServiceAccount
+
+```bash
+kubectl create serviceaccount pvviewer
+```
+
+#### Step 2: Create ClusterRole
+
+```bash
+kubectl create clusterrole pvviewer-role \
+  --resource=persistentvolumes \
+  --verb=list
+```
+
+#### Step 3: Create ClusterRoleBinding
+
+```bash
+kubectl create clusterrolebinding pvviewer-role-binding \
+  --clusterrole=pvviewer-role \
+  --serviceaccount=default:pvviewer
+```
+
+#### Step 4: Create Pod Manifest
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: pvviewer
+  labels:
+    run: pvviewer
+spec:
+  serviceAccountName: pvviewer
+  containers:
+  - name: pvviewer
+    image: redis
+```
+
+Apply:
+
+```bash
+kubectl apply -f pvviewer.yaml
+```
+
+---
+
+## Q3. Create StorageClass
+
+### Task
+
+Create a StorageClass named `rancher-sc` with:
+
+* Provisioner: `rancher.io/local-path`
+* Volume Binding Mode: `WaitForFirstConsumer`
+* Volume Expansion enabled
+
+---
+
+### Solution
+
+#### rancher-sc.yaml
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: rancher-sc
+provisioner: rancher.io/local-path
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+```
+
+Apply:
+
+```bash
+kubectl apply -f rancher-sc.yaml
+```
+
+Verify:
+
+```bash
+kubectl get storageclass rancher-sc -o yaml
+```
+
+---
+
+## Q4. Create ConfigMap and Update Deployment
+
+### Task
+
+1. Create ConfigMap `app-config` in namespace `cm-namespace`.
+2. Add key-values:
+
+   * ENV=production
+   * LOG_LEVEL=info
+3. Modify deployment `cm-webapp` to use these environment variables.
+
+---
+
+### Solution
+
+#### Step 1: Create ConfigMap
+
+```bash
+kubectl create configmap app-config -n cm-namespace \
+  --from-literal=ENV=production \
+  --from-literal=LOG_LEVEL=info
+```
+
+#### Step 2: Update Deployment
+
+```bash
+kubectl set env deployment/cm-webapp -n cm-namespace \
+  --from=configmap/app-config
+```
+
+---
+
+## Q5. Create and Assign PriorityClass
+
+### Task
+
+1. Create PriorityClass `low-priority` with value `50000`.
+2. Modify existing pod `lp-pod` in namespace `low-priority` to use it.
+3. Recreate pod if necessary.
+
+---
+
+### Solution
+
+#### Step 1: Create PriorityClass
+
+```yaml
+apiVersion: scheduling.k8s.io/v1
+kind: PriorityClass
+metadata:
+  name: low-priority
+value: 50000
+globalDefault: false
+description: "Low priority class"
+```
+
+Apply:
+
+```bash
+kubectl apply -f pc.yaml
+```
+
+#### Step 2: Update Pod Definition
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: lp-pod
+  namespace: low-priority
+spec:
+  priorityClassName: low-priority
+  containers:
+  - name: nginx
+    image: nginx
+```
+
+#### Step 3: Recreate Pod
+
+```bash
+kubectl delete pod lp-pod -n low-priority
+kubectl apply -f lp-pod.yaml
+```
+
+---
+
+## Q9. Fix kubeconfig File
+
+### Task
+
+Troubleshoot and fix `/root/CKA/super.kubeconfig`.
+
+---
+
+### Solution
+
+1. Open the file:
+
+```bash
+vi /root/CKA/super.kubeconfig
+```
+
+2. Change incorrect port `9999` to `6443`.
+
+3. Verify:
+
+```bash
+kubectl cluster-info --kubeconfig=/root/CKA/super.kubeconfig
+```
+
+---
+
+## Q10. Fix Deployment Scaling Issue
+
+### Task
+
+Scale `nginx-deploy` to 3 replicas and fix scaling issue.
+
+---
+
+### Solution
+
+#### Step 1: Scale Deployment
+
+```bash
+kubectl scale deploy nginx-deploy --replicas=3
+```
+
+#### Step 2: Check Controller Manager
+
+```bash
+kubectl get pods -n kube-system
+```
+
+If controller-manager is not running:
+
+```bash
+sed -i 's/kube-contro1ler-manager/kube-controller-manager/g' \
+/etc/kubernetes/manifests/kube-controller-manager.yaml
+```
+
+Verify:
+
+```bash
+kubectl get deploy
+```
+
+Expected:
+
+```
+NAME           READY   UP-TO-DATE   AVAILABLE
+nginx-deploy   3/3     3            3
+```
+
+---
+
+## Q11. Create Horizontal Pod Autoscaler
+
+### Task
+
+Create HPA `api-hpa` in namespace `api`:
+
+* Target: `api-deployment`
+* Custom metric: `requests_per_second`
+* Target average: 1000
+* Min replicas: 1
+* Max replicas: 20
+
+---
+
+### Solution
+
+```yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: api-hpa
+  namespace: api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: api-deployment
+  minReplicas: 1
+  maxReplicas: 20
+  metrics:
+  - type: Pods
+    pods:
+      metric:
+        name: requests_per_second
+      target:
+        type: AverageValue
+        averageValue: "1000"
+```
+
+Apply:
+
+```bash
+kubectl apply -f api-hpa.yaml
+```
+
+---
+
+## Q12. Configure HTTP Traffic Splitting
+
+### Task
+
+Split traffic:
+
+* 80% → `web-service`
+* 20% → `web-service-v2`
+
+---
+
+### Solution
+
+```bash
+kubectl create -n default -f - <<EOF
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: web-route
+spec:
+  parentRefs:
+  - name: web-gateway
+  rules:
+  - matches:
+    - path:
+        type: PathPrefix
+        value: /
+    backendRefs:
+    - name: web-service
+      port: 80
+      weight: 80
+    - name: web-service-v2
+      port: 80
+      weight: 20
+EOF
+```
+
+---
+
+## Q13. Helm Release Upgrade
+
+### Task
+
+1. Validate Helm chart at `/root/new-version`
+2. Install as `webpage-server-02`
+3. Uninstall old release `webpage-server-01`
+
+---
+
+### Solution
+
+```bash
+helm ls -n default
+```
+
+Validate:
+
+```bash
+cd /root
+helm lint ./new-version
+```
+
+Install:
+
+```bash
+helm install webpage-server-02 ./new-version
+```
+
+Uninstall old:
+
+```bash
+helm uninstall webpage-server-01 -n default
+```
+
+---
+
+## Q14. Identify Cluster Pod CIDR
+
+### Task
+
+Find cluster Pod CIDR and save to `/root/pod-cidr.txt`.
+
+---
+
+### Solution
+
+```bash
+kubectl -n kube-system get configmap kubeadm-config -o yaml | grep podSubnet
+```
+
+Save value:
+
+```bash
+kubectl -n kube-system get configmap kubeadm-config -o yaml \
+  | awk '/podSubnet:/{print $2}' > /root/pod-cidr.txt
+```
+
+Verify:
+
+```bash
+cat /root/pod-cidr.txt
+```
+
+---
+
+# End of Documentation
+
+---
+
+
+
+
