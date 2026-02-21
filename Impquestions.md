@@ -792,5 +792,167 @@ Find it with :
 kubectl get node <name> -o jsonpath='{.spec.podCIDR}'
 ```
 
+---
+
+# CKA Practice Questions Documentation
+
+---
+
+## Preview Question 1 | ETCD Information
+
+**Task:**
+Find the following information for ETCD on `cka9412` and write it to `/opt/course/p1/etcd-info.txt`:
+
+* Server private key location
+* Server certificate expiration date
+* Is client certificate authentication enabled
+
+### Step 1: Access the node and locate ETCD configuration
+
+ETCD usually runs as a static Pod. Check the manifest directory:
+
+```bash
+ssh cka9412
+sudo -i
+# Static pod manifests are located here:
+vim /etc/kubernetes/manifests/etcd.yaml
+
+```
+
+### Step 2: Extract Configuration Details
+
+From the `etcd.yaml` manifest command arguments:
+
+* **Server Private Key:** `--key-file=/etc/kubernetes/pki/etcd/server.key`
+* **Client Cert Auth:** `--client-cert-auth=true`
+* **Server Certificate:** `--cert-file=/etc/kubernetes/pki/etcd/server.crt`
+
+### Step 3: Check Certificate Expiration
+
+```bash
+openssl x509 -noout -text -in /etc/kubernetes/pki/etcd/server.crt | grep Validity -A2
+
+```
+
+**Output:** `Not After : Oct 29 14:19:27 2025 GMT`
+
+### Step 4: Final Output
+
+```bash
+# /opt/course/p1/etcd-info.txt
+Server private key location: /etc/kubernetes/pki/etcd/server.key
+Server certificate expiration date: Oct 29 14:19:27 2025 GMT
+Is client certificate authentication enabled: yes
+
+```
+
+---
+
+## Preview Question 2 | Kube-Proxy iptables
+
+**Task:**
+Verify `kube-proxy` functionality in namespace `project-hamster` by creating a Pod and Service, then documenting the resulting `iptables` rules on node `cka3962`.
+
+### Step 1: Create Resources
+
+```bash
+ssh cka3962
+# Create Pod
+kubectl -n project-hamster run p2-pod --image=nginx:1-alpine
+# Create Service
+kubectl -n project-hamster expose pod p2-pod --name p2-service --port 3000 --target-port 80
+
+```
+
+### Step 2: Identify iptables Rules
+
+Locate the rules generated for the new service:
+
+```bash
+sudo -i
+iptables-save | grep p2-service
+
+```
+
+### Step 3: Document and Cleanup
+
+Save rules to the required path:
+
+```bash
+iptables-save | grep p2-service > /opt/course/p2/iptables.txt
+
+```
+
+Delete the service and verify cleanup:
+
+```bash
+kubectl -n project-hamster delete svc p2-service
+iptables-save | grep p2-service # Should return no results
+
+```
+
+---
+
+## Preview Question 3 | Change Service CIDR
+
+**Task:**
+Change the Cluster Service CIDR to `11.96.0.0/12` and verify that new services receive IPs from the new range.
+
+### Step 1: Initial Setup
+
+```bash
+kubectl run check-ip --image=httpd:2-alpine
+kubectl expose pod check-ip --name check-ip-service --port 80
+# Note the old IP (e.g., 10.97.6.41)
+
+```
+
+### Step 2: Update Control Plane Manifests
+
+Update the `--service-cluster-ip-range=11.96.0.0/12` flag in both:
+
+1. `/etc/kubernetes/manifests/kube-apiserver.yaml`
+2. `/etc/kubernetes/manifests/kube-controller-manager.yaml`
+
+Wait for both components to restart:
+
+```bash
+watch kubectl -n kube-system get pods
+
+```
+
+### Step 3: Update ServiceCIDR Resource
+
+```bash
+# Create new ServiceCIDR
+cat <<EOF | kubectl apply -f -
+apiVersion: networking.k8s.io/v1
+kind: ServiceCIDR
+metadata:
+  name: svc-cidr-new
+spec:
+  cidrs:
+  - 11.96.0.0/12
+EOF
+
+# Delete old ServiceCIDR
+kubectl delete servicecidr kubernetes
+
+```
+
+### Step 4: Verification
+
+Expose the pod again to create a second service:
+
+```bash
+kubectl expose pod check-ip --name check-ip-service2 --port 80
+kubectl get svc
+
+```
+
+**Expected Result:** `check-ip-service2` should have an IP starting with `11.x.x.x`.
+
+---
+
 
 
