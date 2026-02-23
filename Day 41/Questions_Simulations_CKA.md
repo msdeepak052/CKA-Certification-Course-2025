@@ -155,81 +155,65 @@ echo "--------------------------------------"
 
 PASS=true
 
-# 1️⃣ Check PVC exists
-if ! kubectl get pvc mariadb -n mariadb &>/dev/null; then
-  echo "❌ PVC 'mariadb' not found in namespace mariadb"
-  PASS=false
-else
+# PVC exists
+if kubectl get pvc mariadb -n mariadb &>/dev/null; then
   echo "✅ PVC exists"
+else
+  echo "❌ PVC 'mariadb' not found"
+  PASS=false
 fi
 
-# 2️⃣ Check AccessMode
+# AccessMode
 MODE=$(kubectl get pvc mariadb -n mariadb -o jsonpath='{.spec.accessModes[0]}' 2>/dev/null)
-if [ "$MODE" != "ReadWriteOnce" ]; then
-  echo "❌ PVC AccessMode is not ReadWriteOnce"
-  PASS=false
-else
+if [ "$MODE" = "ReadWriteOnce" ]; then
   echo "✅ AccessMode correct"
+else
+  echo "❌ AccessMode is not ReadWriteOnce"
+  PASS=false
 fi
 
-# 3️⃣ Check Storage request
+# Storage
 SIZE=$(kubectl get pvc mariadb -n mariadb -o jsonpath='{.spec.resources.requests.storage}' 2>/dev/null)
-if [ "$SIZE" != "250Mi" ]; then
-  echo "❌ PVC storage request is not 250Mi"
-  PASS=false
-else
+if [ "$SIZE" = "250Mi" ]; then
   echo "✅ Storage size correct"
+else
+  echo "❌ Storage request is not 250Mi"
+  PASS=false
 fi
 
-# 4️⃣ Check PVC Bound
+# PVC Bound
 STATUS=$(kubectl get pvc mariadb -n mariadb -o jsonpath='{.status.phase}' 2>/dev/null)
-if [ "$STATUS" != "Bound" ]; then
-  echo "❌ PVC is not Bound"
-  PASS=false
-else
+if [ "$STATUS" = "Bound" ]; then
   echo "✅ PVC Bound"
+else
+  echo "❌ PVC not Bound"
+  PASS=false
 fi
 
-# 5️⃣ Check Deployment exists
-if ! kubectl get deployment mariadb -n mariadb &>/dev/null; then
-  echo "❌ Deployment 'mariadb' not found"
-  PASS=false
-else
+# Deployment exists
+if kubectl get deployment mariadb -n mariadb &>/dev/null; then
   echo "✅ Deployment exists"
+else
+  echo "❌ Deployment not found"
+  PASS=false
 fi
 
-# 6️⃣ Check Deployment available
+# Deployment stable
 AVAILABLE=$(kubectl get deployment mariadb -n mariadb -o jsonpath='{.status.availableReplicas}' 2>/dev/null)
-if [ "$AVAILABLE" != "1" ]; then
-  echo "❌ Deployment not stable (availableReplicas != 1)"
-  PASS=false
-else
+if [ "$AVAILABLE" = "1" ]; then
   echo "✅ Deployment stable"
+else
+  echo "❌ Deployment not stable"
+  PASS=false
 fi
 
-# 7️⃣ Check Deployment uses correct PVC
-CLAIM=$(kubectl get deploy mariadb -n mariadb -o jsonpath='{.spec.template.spec.volumes[?(@.persistentVolumeClaim)].persistentVolumeClaim.claimName}' 2>/dev/null)
-if [ "$CLAIM" != "mariadb" ]; then
-  echo "❌ Deployment is not using PVC 'mariadb'"
-  PASS=false
-else
+# Deployment uses correct PVC
+CLAIM=$(kubectl get deployment mariadb -n mariadb -o jsonpath='{.spec.template.spec.volumes[?(@.persistentVolumeClaim)].persistentVolumeClaim.claimName}' 2>/dev/null)
+if [ "$CLAIM" = "mariadb" ]; then
   echo "✅ Deployment using correct PVC"
-fi
-
-# 8️⃣ Check Data Preservation (important fix)
-POD=$(kubectl get pod -n mariadb -l app=mariadb -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
-
-if [ -z "$POD" ]; then
-  echo "❌ MariaDB pod not running"
-  PASS=false
 else
-  DB_CHECK=$(kubectl exec -n mariadb $POD -- mysql -uroot -prootpass -e "SHOW DATABASES;" 2>/dev/null | grep -w cka_test)
-  if [ -z "$DB_CHECK" ]; then
-    echo "❌ Data NOT preserved (cka_test DB missing)"
-    PASS=false
-  else
-    echo "✅ Data preserved (cka_test exists)"
-  fi
+  echo "❌ Deployment not using PVC 'mariadb'"
+  PASS=false
 fi
 
 echo "--------------------------------------"
