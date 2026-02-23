@@ -224,3 +224,168 @@ else
 fi
 echo "--------------------------------------"
 ```
+
+
+2. 
+
+Question requires:
+
+1. Existing `wordpress` Deployment
+2. Add sidecar container:
+
+   * Name: `sidecar`
+   * Image: `busybox:stable`
+   * Command: `/bin/sh -c tail -f /var/log/wordpress.log`
+3. Use shared volume mounted at `/var/log`
+4. Log file `wordpress.log` must be accessible to both containers
+
+Nothing else will be validated.
+
+---
+
+# 🧪 PART 1 — SIMULATOR SCRIPT (Run First)
+
+This creates a base wordpress deployment WITHOUT sidecar.
+
+```bash
+# Clean previous setup
+kubectl delete deployment wordpress --ignore-not-found=true
+kubectl delete svc wordpress --ignore-not-found=true
+
+# Create initial wordpress deployment (WITHOUT sidecar)
+cat <<EOF | kubectl apply -f -
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: wordpress
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: wordpress
+  template:
+    metadata:
+      labels:
+        app: wordpress
+    spec:
+      containers:
+      - name: wordpress
+        image: wordpress:6.4-apache
+        volumeMounts:
+        - name: wp-logs
+          mountPath: /var/log
+      volumes:
+      - name: wp-logs
+        emptyDir: {}
+EOF
+
+kubectl wait --for=condition=available deployment/wordpress --timeout=60s
+
+echo "--------------------------------------"
+echo "🔥 SCENARIO READY 🔥"
+echo "--------------------------------------"
+echo "TASK:"
+echo "Update deployment 'wordpress'"
+echo "Add sidecar container named 'sidecar'"
+echo "Image: busybox:stable"
+echo "Command: /bin/sh -c tail -f /var/log/wordpress.log"
+echo "Use shared volume mounted at /var/log"
+echo "--------------------------------------"
+```
+
+---
+
+# 🎯 YOUR TASK
+
+Modify the existing deployment.
+
+You may use:
+
+```
+kubectl edit deployment wordpress
+```
+
+or patch or apply YAML.
+
+---
+
+# ✅ PART 2 — STRICT VALIDATOR SCRIPT
+
+This checks ONLY what the question demands.
+
+Run AFTER you finish.
+
+```bash
+echo "--------------------------------------"
+echo "🔍 CKA QUESTION 3A VALIDATION"
+echo "--------------------------------------"
+
+PASS=true
+
+# Check sidecar exists
+SIDECAR_EXISTS=$(kubectl get deploy wordpress -o jsonpath='{.spec.template.spec.containers[?(@.name=="sidecar")].name}' 2>/dev/null)
+
+if [ "$SIDECAR_EXISTS" = "sidecar" ]; then
+  echo "✅ Sidecar container exists"
+else
+  echo "❌ Sidecar container not found"
+  PASS=false
+fi
+
+# Check sidecar image
+IMAGE=$(kubectl get deploy wordpress -o jsonpath='{.spec.template.spec.containers[?(@.name=="sidecar")].image}' 2>/dev/null)
+
+if [ "$IMAGE" = "busybox:stable" ]; then
+  echo "✅ Sidecar image correct"
+else
+  echo "❌ Sidecar image incorrect"
+  PASS=false
+fi
+
+# Check command
+COMMAND=$(kubectl get deploy wordpress -o jsonpath='{.spec.template.spec.containers[?(@.name=="sidecar")].command}' 2>/dev/null)
+
+EXPECTED="/bin/sh -c tail -f /var/log/wordpress.log"
+
+if echo "$COMMAND" | grep -q "tail -f /var/log/wordpress.log"; then
+  echo "✅ Sidecar command correct"
+else
+  echo "❌ Sidecar command incorrect"
+  PASS=false
+fi
+
+# Check volume mounted at /var/log in sidecar
+MOUNT=$(kubectl get deploy wordpress -o jsonpath='{.spec.template.spec.containers[?(@.name=="sidecar")].volumeMounts[?(@.mountPath=="/var/log")].mountPath}' 2>/dev/null)
+
+if [ "$MOUNT" = "/var/log" ]; then
+  echo "✅ Sidecar volume mounted at /var/log"
+else
+  echo "❌ Sidecar volume not mounted at /var/log"
+  PASS=false
+fi
+
+# Check wordpress container also mounts /var/log
+WP_MOUNT=$(kubectl get deploy wordpress -o jsonpath='{.spec.template.spec.containers[?(@.name=="wordpress")].volumeMounts[?(@.mountPath=="/var/log")].mountPath}' 2>/dev/null)
+
+if [ "$WP_MOUNT" = "/var/log" ]; then
+  echo "✅ Wordpress container shares /var/log"
+else
+  echo "❌ Wordpress container does not share /var/log"
+  PASS=false
+fi
+
+echo "--------------------------------------"
+if [ "$PASS" = true ]; then
+  echo "🎉 CKA QUESTION 3A SUCCESSFULLY COMPLETED"
+else
+  echo "🚨 VALIDATION FAILED — REVIEW YOUR CHANGES"
+fi
+echo "--------------------------------------"
+```
+
+---
+
+
+
+---
+
