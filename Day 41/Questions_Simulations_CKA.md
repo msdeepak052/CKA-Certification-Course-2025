@@ -271,6 +271,7 @@ spec:
       containers:
       - name: wordpress
         image: wordpress:6.4-apache
+        command: ['sh', '-c', 'while true; do echo "CKA Practise" >> /var/log/wordpress.log; sleep 1; done']
         volumeMounts:
         - name: wp-logs
           mountPath: /var/log
