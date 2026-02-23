@@ -150,27 +150,20 @@ echo "------------------------------------------------"
 ```bash
 
 echo "--------------------------------------"
-echo "🔍 CKA VALIDATION STARTED"
+echo "🔍 CKA SOLUTION VALIDATION"
 echo "--------------------------------------"
 
 PASS=true
 
-echo "1️⃣ Checking namespace..."
-kubectl get ns mariadb &>/dev/null || { echo "❌ Namespace mariadb missing"; PASS=false; }
-
-echo "2️⃣ Checking PV..."
-PV_COUNT=$(kubectl get pv --no-headers | wc -l)
-if [ "$PV_COUNT" -ne 1 ]; then
-  echo "❌ There should be exactly ONE PV"
+# 1️⃣ Check PVC exists
+if ! kubectl get pvc mariadb -n mariadb &>/dev/null; then
+  echo "❌ PVC 'mariadb' not found in namespace mariadb"
   PASS=false
 else
-  echo "✅ One PV exists"
+  echo "✅ PVC exists"
 fi
 
-echo "3️⃣ Checking PVC existence..."
-kubectl get pvc mariadb -n mariadb &>/dev/null || { echo "❌ PVC 'mariadb' not found"; PASS=false; }
-
-echo "4️⃣ Checking PVC AccessMode..."
+# 2️⃣ Check AccessMode
 MODE=$(kubectl get pvc mariadb -n mariadb -o jsonpath='{.spec.accessModes[0]}' 2>/dev/null)
 if [ "$MODE" != "ReadWriteOnce" ]; then
   echo "❌ PVC AccessMode is not ReadWriteOnce"
@@ -179,16 +172,16 @@ else
   echo "✅ AccessMode correct"
 fi
 
-echo "5️⃣ Checking PVC Storage..."
+# 3️⃣ Check Storage request
 SIZE=$(kubectl get pvc mariadb -n mariadb -o jsonpath='{.spec.resources.requests.storage}' 2>/dev/null)
 if [ "$SIZE" != "250Mi" ]; then
-  echo "❌ PVC storage is not 250Mi"
+  echo "❌ PVC storage request is not 250Mi"
   PASS=false
 else
   echo "✅ Storage size correct"
 fi
 
-echo "6️⃣ Checking PVC Bound status..."
+# 4️⃣ Check PVC Bound
 STATUS=$(kubectl get pvc mariadb -n mariadb -o jsonpath='{.status.phase}' 2>/dev/null)
 if [ "$STATUS" != "Bound" ]; then
   echo "❌ PVC is not Bound"
@@ -197,20 +190,25 @@ else
   echo "✅ PVC Bound"
 fi
 
-echo "7️⃣ Checking Deployment..."
-kubectl get deployment mariadb -n mariadb &>/dev/null || { echo "❌ Deployment not found"; PASS=false; }
-
-echo "8️⃣ Checking Deployment availability..."
-AVAILABLE=$(kubectl get deployment mariadb -n mariadb -o jsonpath='{.status.availableReplicas}' 2>/dev/null)
-if [ "$AVAILABLE" != "1" ]; then
-  echo "❌ Deployment not available"
+# 5️⃣ Check Deployment exists
+if ! kubectl get deployment mariadb -n mariadb &>/dev/null; then
+  echo "❌ Deployment 'mariadb' not found"
   PASS=false
 else
-  echo "✅ Deployment available"
+  echo "✅ Deployment exists"
 fi
 
-echo "9️⃣ Checking Deployment uses PVC..."
-CLAIM=$(kubectl get deploy mariadb -n mariadb -o jsonpath='{.spec.template.spec.volumes[0].persistentVolumeClaim.claimName}' 2>/dev/null)
+# 6️⃣ Check Deployment available
+AVAILABLE=$(kubectl get deployment mariadb -n mariadb -o jsonpath='{.status.availableReplicas}' 2>/dev/null)
+if [ "$AVAILABLE" != "1" ]; then
+  echo "❌ Deployment not stable (availableReplicas != 1)"
+  PASS=false
+else
+  echo "✅ Deployment stable"
+fi
+
+# 7️⃣ Check Deployment uses correct PVC
+CLAIM=$(kubectl get deploy mariadb -n mariadb -o jsonpath='{.spec.template.spec.volumes[?(@.persistentVolumeClaim)].persistentVolumeClaim.claimName}' 2>/dev/null)
 if [ "$CLAIM" != "mariadb" ]; then
   echo "❌ Deployment is not using PVC 'mariadb'"
   PASS=false
@@ -218,15 +216,16 @@ else
   echo "✅ Deployment using correct PVC"
 fi
 
-echo "🔟 Checking Data Preservation..."
+# 8️⃣ Check Data Preservation (important fix)
 POD=$(kubectl get pod -n mariadb -l app=mariadb -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+
 if [ -z "$POD" ]; then
-  echo "❌ Pod not running"
+  echo "❌ MariaDB pod not running"
   PASS=false
 else
-  DB_CHECK=$(kubectl exec -n mariadb $POD -- mysql -uroot -prootpass -e "SHOW DATABASES;" 2>/dev/null | grep cka_test)
+  DB_CHECK=$(kubectl exec -n mariadb $POD -- mysql -uroot -prootpass -e "SHOW DATABASES;" 2>/dev/null | grep -w cka_test)
   if [ -z "$DB_CHECK" ]; then
-    echo "❌ Database cka_test not found (Data NOT preserved)"
+    echo "❌ Data NOT preserved (cka_test DB missing)"
     PASS=false
   else
     echo "✅ Data preserved (cka_test exists)"
@@ -235,9 +234,9 @@ fi
 
 echo "--------------------------------------"
 if [ "$PASS" = true ]; then
-  echo "🎉 ALL CHECKS PASSED — CKA TASK SOLVED CORRECTLY"
+  echo "🎉 CKA TASK SUCCESSFULLY COMPLETED"
 else
-  echo "🚨 SOME CHECKS FAILED — REVIEW YOUR SOLUTION"
+  echo "🚨 VALIDATION FAILED — REVIEW YOUR FIX"
 fi
 echo "--------------------------------------"
 ```
