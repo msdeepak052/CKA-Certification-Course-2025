@@ -953,6 +953,191 @@ kubectl get svc
 **Expected Result:** `check-ip-service2` should have an IP starting with `11.x.x.x`.
 
 ---
+Here is the **complete final version**, including the proper **question statement** and the full working solution (CKA-ready).
+
+---
+
+# 📝 Question Statement
+
+Create a new user called **john**. Grant him access to the Kubernetes cluster using a CertificateSigningRequest (CSR) named **john-developer**.
+
+The private key is available at:
+
+```
+/root/CKA/john.key
+```
+
+The CSR file is available at:
+
+```
+/root/CKA/john.csr
+```
+
+Perform the following tasks:
+
+1. Create a CertificateSigningRequest object named `john-developer` using the provided CSR.
+2. Approve the CSR.
+3. Create a Role named `developer` in the `development` namespace that allows the following permissions on Pods:
+
+   * create
+   * list
+   * get
+   * update
+   * delete
+4. Create a RoleBinding named `developer-role-binding` that binds the Role to the user `john` in the `development` namespace.
+5. Verify that the user `john` can manage pods only in the `development` namespace.
+
+> Note: As of Kubernetes 1.19+, the CSR object requires a `signerName`.
+
+---
+
+
+We will:
+
+1. Create CSR (`john-developer`)
+2. Approve it
+3. Extract certificate
+4. Create Role
+5. Create RoleBinding
+6. Verify access
+
+---
+
+# ✅ STEP 1 — Create CSR Object
+
+Generate base64 value:
+
+```bash
+base64 < /root/CKA/john.csr | tr -d '\n'
+```
+
+Copy the output.
+
+---
+
+## 📄 john-csr.yaml
+
+```yaml
+apiVersion: certificates.k8s.io/v1
+kind: CertificateSigningRequest
+metadata:
+  name: john-developer
+spec:
+  request: <PASTE_BASE64_OUTPUT_HERE>
+  signerName: kubernetes.io/kube-apiserver-client
+  usages:
+  - digital signature
+  - key encipherment
+  - client auth
+```
+
+Apply it:
+
+```bash
+kubectl apply -f john-csr.yaml
+```
+
+---
+
+# ✅ STEP 2 — Approve CSR
+
+```bash
+kubectl certificate approve john-developer
+```
+
+Verify:
+
+```bash
+kubectl get csr john-developer
+```
+
+Expected:
+
+```
+Approved,Issued
+```
+
+---
+
+# ✅ STEP 3 — Extract Issued Certificate
+
+```bash
+kubectl get csr john-developer -o jsonpath='{.status.certificate}' \
+| base64 -d > /root/CKA/john.crt
+```
+
+Now you have:
+
+```
+/root/CKA/john.key
+/root/CKA/john.crt
+```
+
+---
+
+# ✅ STEP 4 — Create Role (developer)
+
+```bash
+kubectl create role developer \
+  --resource=pods \
+  --verb=create,list,get,update,delete \
+  --namespace=development
+```
+
+---
+
+# ✅ STEP 5 — Create RoleBinding
+
+```bash
+kubectl create rolebinding developer-role-binding \
+  --role=developer \
+  --user=john \
+  --namespace=development
+```
+
+---
+
+# ✅ STEP 6 — Verify Permissions
+
+```bash
+kubectl auth can-i create pods --as=john -n development
+```
+
+Expected:
+
+```
+yes
+```
+
+Test outside namespace:
+
+```bash
+kubectl auth can-i create pods --as=john -n default
+```
+
+Expected:
+
+```
+no
+```
+
+---
+
+# 🎯 Important CKA Points
+
+* `signerName` is mandatory in Kubernetes ≥1.19
+* CSR must be base64 encoded (single line)
+* CSR CN must match user (`CN=john`)
+* Role + RoleBinding must be in `development` namespace
+* Role (not ClusterRole) limits access to namespace
+
+---
+
+# 🚀 Final Workflow (Memorize for Exam)
+
+CSR → Approve → Extract Cert → Create Role → Create RoleBinding → Test with `can-i`
+
+---
 
 
 
