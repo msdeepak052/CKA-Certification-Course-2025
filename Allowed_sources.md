@@ -1,8 +1,4 @@
-Here’s a cleaner, structured version you can use for clarity and readability:
-
----
-
-## **Allowed Tools & Resources for CKA & CKAD Exams**
+# **Allowed Tools & Resources for CKA & CKAD Exams**
 
 During the **Certified Kubernetes Administrator (CKA)** and **Certified Kubernetes Application Developer (CKAD)** exams, candidates are permitted to use specific tools and documentation under strict conditions.
 
