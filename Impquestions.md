@@ -19,6 +19,7 @@
 13. [Traffic Splitting](#traffic-splitting)
 14. [ETCD Information](#etcd-information)
 15. [Certificate Signing Requests](#certificate-signing-requests)
+16. [Nslookup](#Nslookup)
 
 ---
 
@@ -675,6 +676,122 @@ Uninstall old release:
 ```bash
 helm uninstall webpage-server-01 -n default
 ```
+
+---
+
+## Nslookup 
+
+# ✅ **Step 1: Create nginx Pod**
+
+```bash
+kubectl run nginx-resolver --image=nginx
+```
+
+---
+
+# ✅ **Step 2: Expose Pod as ClusterIP Service**
+
+```bash
+kubectl expose pod nginx-resolver \
+  --name=nginx-resolver-service \
+  --port=80 \
+  --target-port=80 \
+  --type=ClusterIP
+```
+
+---
+
+# ✅ **Step 3: Verify DNS Resolution (Service Name)**
+
+Run a temporary BusyBox pod and perform DNS lookup:
+
+```bash
+kubectl run test-nslookup \
+  --image=busybox:1.28 \
+  --rm -it --restart=Never \
+  -- nslookup nginx-resolver-service
+```
+
+👉 Save output to file:
+
+```bash
+kubectl run test-nslookup \
+  --image=busybox:1.28 \
+  --rm -it --restart=Never \
+  -- nslookup nginx-resolver-service \
+  > /root/CKA/nginx.svc
+```
+
+---
+
+# ✅ **Step 4: Get Pod IP**
+
+```bash
+kubectl get pod nginx-resolver -o wide
+```
+
+Example output:
+
+```
+nginx-resolver   1/1   Running   10.244.0.5
+```
+
+---
+
+# ✅ **Step 5: Convert Pod IP to DNS Format**
+
+Convert:
+
+```
+10.244.0.5  →  10-244-0-5.default.pod
+```
+
+---
+
+# ✅ **Step 6: Verify Pod Reachability (via DNS)**
+
+```bash
+kubectl run test-nslookup \
+  --image=busybox:1.28 \
+  --rm -it --restart=Never \
+  -- nslookup 10-244-0-5.default.pod
+```
+
+👉 Save output:
+
+```bash
+kubectl run test-nslookup \
+  --image=busybox:1.28 \
+  --rm -it --restart=Never \
+  -- nslookup 10-244-0-5.default.pod \
+  > /root/CKA/nginx.pod
+```
+
+---
+
+# 🎯 **Final Files**
+
+* `/root/CKA/nginx.svc` → Service DNS lookup
+* `/root/CKA/nginx.pod` → Pod DNS lookup
+
+---
+
+# ⚡ **Quick Tips (CKA Exam)**
+
+* Always use `--rm -it --restart=Never` for temporary pods
+* Service DNS format:
+
+  ```
+  <service-name>.<namespace>.svc.cluster.local
+  ```
+* Pod DNS format:
+
+  ```
+  <pod-ip-with-dashes>.<namespace>.pod
+  ```
+
+---
+
 
 ---
 
